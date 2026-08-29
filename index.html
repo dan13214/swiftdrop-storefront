@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SwiftDrop — Trending Products</title>
+<title>Nordly — Trending Products</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#0a0a0f;--surface:#111120;--border:#1e1e38;--accent:#4f6ef7;--green:#6bffaa;--red:#ff6b6b;--text:#f0f0f0;--muted:#888}
@@ -98,12 +98,12 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:14px 2
 <script src="https://js.stripe.com/v3/"></script>
 <div class="ticker"><div class="ticker-track" id="ticker"></div></div>
 <nav>
-  <div class="logo">SWIFT<span>DROP</span></div>
+  <div class="logo">NORD<span>LY</span></div>
   <button class="cart-btn" onclick="toggleCart()">🛒 Cart <span class="badge-count" id="cartCount">0</span></button>
 </nav>
 <div class="hero">
   <h1>Today's <em>Hottest</em> Products</h1>
-  <p>Curated daily — fast shipping, maximum margins</p>
+  <p>Curated daily — fast, reliable shipping</p>
 </div>
 <div class="filters" id="filters"></div>
 <div id="main"></div>
@@ -148,13 +148,13 @@ function renderGrid(){
   const f=filter==='All'?products:products.filter(p=>p.category===filter);
   document.getElementById('main').innerHTML=`<div class="grid">${f.map(p=>`
     <div class="card" onclick="openProduct('${p.id}')">
-      <div class="card-img">${p.emoji||'📦'}</div>
+      <div class="card-img">${p.image?`<img src="${p.image}" loading="lazy" style="width:100%;height:100%;object-fit:cover">`:(p.emoji||'📦')}</div>
       <div class="card-body">
         <span class="${pillClass(p.badge)}">${p.badge||'TRENDING'}</span>
         <h3>${p.name}</h3>
         <div class="stars">${'★'.repeat(Math.floor(p.rating||4.5))}${'☆'.repeat(5-Math.floor(p.rating||4.5))} ${p.rating||4.5}</div>
         <div class="sold">${(p.orders_count||0).toLocaleString()}+ sold</div>
-        <div class="card-foot"><span class="price">£${Number(p.price).toFixed(2)}</span><span class="margin-tag">${margin(p)}% margin</span></div>
+        <div class="card-foot"><span class="price">£${Number(p.price).toFixed(2)}</span><span class="margin-tag">Free UK delivery</span></div>
         <button class="add-btn" onclick="event.stopPropagation();addToCart('${p.id}')">Add to Cart</button>
       </div>
     </div>`).join('')}</div>`;
@@ -164,10 +164,10 @@ function openProduct(id){
   const p=products.find(x=>x.id===id);if(!p)return;qty=1;
   showOverlay(`<div class="modal" onclick="event.stopPropagation()">
     <button class="modal-close" onclick="closeOverlay()">✕</button>
-    <div class="modal-img">${p.emoji||'📦'}</div>
+    <div class="modal-img">${p.image?`<img src="${p.image}" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:10px">`:(p.emoji||'📦')}</div>
     <span class="${pillClass(p.badge)}">${p.badge||'TRENDING'}</span>
     <h2 style="margin-top:8px">${p.name}</h2>
-    <div class="modal-prices"><span class="modal-price">£${Number(p.price).toFixed(2)}</span><span class="profit-chip">✓ ${margin(p)}% margin</span></div>
+    <div class="modal-prices"><span class="modal-price">£${Number(p.price).toFixed(2)}</span><span class="profit-chip">✓ In Stock</span></div>
     <p>${p.description||'Premium quality product with fast worldwide shipping.'}</p>
     <div class="qty-row">
       <span style="color:var(--muted);font-size:13px">Qty:</span>
@@ -329,7 +329,7 @@ function overlayClick(e){if(e.target===document.getElementById('overlay'))closeO
 function toast(msg){const el=document.createElement('div');el.className='toast';el.textContent=msg;document.body.appendChild(el);setTimeout(()=>el.remove(),2200)}
 
 function renderTicker(){
-  const items=['🔥 Trending products updated daily','⚡ Free shipping over £50','💰 Up to 80% profit margins','📦 Auto-fulfilment','🌍 Ships worldwide','⭐ 4.8 avg rating'];
+  const items=['🔥 Trending products updated daily','⚡ Free shipping over £50','🚚 Fast dispatch','🌍 Ships worldwide','⭐ 4.8 avg rating','🔒 Secure checkout'];
   document.getElementById('ticker').innerHTML=[...items,...items].map(i=>`<span class="t-item">● ${i}</span>`).join('');
 }
 
