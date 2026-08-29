@@ -95,6 +95,7 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:14px 2
 </style>
 </head>
 <body>
+<script src="https://js.stripe.com/v3/"></script>
 <div class="ticker"><div class="ticker-track" id="ticker"></div></div>
 <nav>
   <div class="logo">SWIFT<span>DROP</span></div>
@@ -114,6 +115,7 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:14px 2
 <script>
 const API='https://swiftdrop-backend-production.up.railway.app';
 let products=[],cart=[],filter='All',qty=1;
+let stripe=null,elements=null,pendingOrderId=null;
 
 async function init(){
   renderTicker();
@@ -126,6 +128,11 @@ async function init(){
     products=demo();
   }
   renderFilters();renderGrid();
+  try{
+    const r=await fetch(API+'/api/payments/config');
+    const d=await r.json();
+    if(d.publishable_key)stripe=Stripe(d.publishable_key);
+  }catch{}
 }
 
 function margin(p){return Math.round(((p.price-p.cost)/p.price)*100)}
@@ -238,12 +245,12 @@ function openCheckout(){
       <div class="form-group"><label>Postcode</label><input id="postcode" placeholder="M1 1AA"/></div>
     </div>
     <div id="payError" class="err"></div>
-    <button class="pay-btn" id="payBtn" onclick="submitOrder(${total.toFixed(2)})">Place Order — £${total.toFixed(2)}</button>
-    <p class="stripe-note">🔒 Secured · Fast UK Delivery</p>
+    <button class="pay-btn" id="payBtn" onclick="proceedToPayment(${total.toFixed(2)})">Continue to Payment — £${total.toFixed(2)}</button>
+    <p class="stripe-note">🔒 Secured by Stripe · Fast UK Delivery</p>
   </div>`);
 }
 
-async function submitOrder(total){
+async function proceedToPayment(total){
   const fname=document.getElementById('fname').value.trim();
   const lname=document.getElementById('lname').value.trim();
   const email=document.getElementById('email').value.trim();
@@ -252,26 +259,68 @@ async function submitOrder(total){
   const postcode=document.getElementById('postcode').value.trim();
   const err=document.getElementById('payError');err.style.display='none';
   if(!fname||!lname||!email||!addr1||!city||!postcode){err.textContent='Please fill in all fields.';err.style.display='block';return}
-  const btn=document.getElementById('payBtn');btn.disabled=true;btn.textContent='Processing...';
+  if(!stripe){err.textContent='Payment is unavailable right now. Please try again shortly.';err.style.display='block';return}
+  const btn=document.getElementById('payBtn');btn.disabled=true;btn.textContent='Loading payment...';
   try{
-    const r=await fetch(API+'/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},
+    const orderRes=await fetch(API+'/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({customer_email:email,customer_name:fname+' '+lname,
         shipping_address:{line1:addr1,city,postcode},
         items:cart.map(p=>({product_id:p.id,quantity:p.qty}))})});
-    const d=await r.json();
-    if(!d.success)throw new Error(d.error||'Order failed');
-    cart=[];updateCount();
+    const orderData=await orderRes.json();
+    if(!orderData.success)throw new Error(orderData.error||'Order failed');
+    pendingOrderId=orderData.order_id;
+    const intentRes=await fetch(API+'/api/payments/create-intent',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({order_id:pendingOrderId})});
+    const intentData=await intentRes.json();
+    if(!intentData.success)throw new Error(intentData.error||'Could not start payment');
+    elements=stripe.elements({clientSecret:intentData.client_secret});
+    const paymentElement=elements.create('payment');
+    showOverlay(`<div class="checkout-modal" onclick="event.stopPropagation()">
+      <button class="modal-close" onclick="closeOverlay()">✕</button>
+      <h2>Payment</h2>
+      <div class="order-summary">
+        <div class="os-item"><span>Order</span><span>${pendingOrderId}</span></div>
+        <div class="os-total"><span>Total</span><span>£${total}</span></div>
+      </div>
+      <div id="payment-element" style="margin-bottom:16px"></div>
+      <div id="payError" class="err"></div>
+      <button class="pay-btn" id="payBtn">Pay £${total}</button>
+      <p class="stripe-note">🔒 Secured by Stripe</p>
+    </div>`);
+    paymentElement.mount('#payment-element');
+    document.getElementById('payBtn').onclick=()=>confirmPayment(total,fname);
+  }catch(e){
+    const btn2=document.getElementById('payBtn');
+    if(btn2){btn2.disabled=false;btn2.textContent='Continue to Payment — £'+total}
+    err.textContent=e.message;err.style.display='block';
+  }
+}
+
+async function confirmPayment(total,fname){
+  const err=document.getElementById('payError');err.style.display='none';
+  const btn=document.getElementById('payBtn');btn.disabled=true;btn.textContent='Processing...';
+  const {error,paymentIntent}=await stripe.confirmPayment({elements,redirect:'if_required'});
+  if(error){
+    btn.disabled=false;btn.textContent='Pay £'+total;
+    err.textContent=error.message||'Payment failed. Please try again.';err.style.display='block';
+    return;
+  }
+  if(paymentIntent&&paymentIntent.status==='succeeded'){
+    const orderId=pendingOrderId;cart=[];updateCount();
     document.getElementById('overlayContent').innerHTML=`<div class="checkout-modal" onclick="event.stopPropagation()">
       <div class="success-screen">
         <div class="icon">✅</div>
         <h2>Order Confirmed!</h2>
         <p>Thanks ${fname}! Your order is being processed and will be dispatched shortly.</p>
-        <div class="order-id-box">${d.order_id}</div>
+        <div class="order-id-box">${orderId}</div>
         <p style="color:var(--muted);font-size:13px">Total: <b style="color:var(--text)">£${total}</b></p>
         <br><button class="pay-btn" onclick="closeOverlay()" style="margin-top:8px">Continue Shopping</button>
       </div>
     </div>`;
-  }catch(e){btn.disabled=false;btn.textContent='Place Order — £'+total;err.textContent=e.message;err.style.display='block'}
+  }else{
+    btn.disabled=false;btn.textContent='Pay £'+total;
+    err.textContent='Payment did not complete. Please try again.';err.style.display='block';
+  }
 }
 
 function showOverlay(html){document.getElementById('overlayContent').innerHTML=html;document.getElementById('overlay').style.display='flex';document.body.style.overflow='hidden'}
